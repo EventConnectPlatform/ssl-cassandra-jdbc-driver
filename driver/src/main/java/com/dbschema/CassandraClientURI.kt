@@ -188,8 +188,12 @@ class CassandraClientURI(uri: String, info: Properties?) {
             }
             logger.info("Adding contact point: $host with port $port")
             builder.addContactPoints(InetAddress.getByName(host))
-            logger.info("sslenabled: $sslEnabled")
-            if (sslEnabled) {
+
+            val enableSsl = SecretMapping.Env.CassClientSsl.cassClientEnableSsl
+
+            logger.info("Enable SSL: $enableSsl")
+            if (enableSsl) {
+                logger.info("Configuring SSL")
                 val truststore = Pair(
                     SecretMapping.File.cassClientTruststore,
                     SecretMapping.Env.CassClientSsl.cassClientTruststorePassword

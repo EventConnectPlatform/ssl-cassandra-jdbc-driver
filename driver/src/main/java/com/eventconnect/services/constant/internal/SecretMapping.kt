@@ -9,6 +9,8 @@ import java.io.File
 
 object SecretMapping {
     object Key {
+        const val cassClientEnableSsl = "CASS_CLIENT_ENABLE_SSL"
+
         const val cassClientKeystore = "CASS_CLIENT_KEYSTORE"
         const val cassClientKeystorePassword = "CASS_CLIENT_KEYSTORE_PASSWORD"
 
@@ -33,6 +35,8 @@ object SecretMapping {
     @Suppress("SimpleRedundantLet")
     object Env {
         object CassClientSsl {
+            val cassClientEnableSsl = env[Key.cassClientEnableSsl]?.toBoolean() ?: false
+
             val cassClientKeystore = env[Key.cassClientKeystore]
             val cassClientKeystorePassword = env[Key.cassClientKeystorePassword]
 
