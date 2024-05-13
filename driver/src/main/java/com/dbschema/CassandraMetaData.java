@@ -103,7 +103,7 @@ public class CassandraMetaData implements DatabaseMetaData {
     }
 
     public String getDriverName() {
-        return "Cassandra JDBC Driver";
+        return "SSL Cassandra JDBC Driver (Modified by EventConnect)";
     }
 
     public String getDriverVersion() {
