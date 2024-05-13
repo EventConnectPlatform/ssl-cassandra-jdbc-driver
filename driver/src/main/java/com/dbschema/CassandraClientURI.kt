@@ -1,104 +1,154 @@
-package com.dbschema;
+package com.dbschema
 
-import com.datastax.driver.core.*;
-import com.google.common.base.Strings;
+import com.datastax.driver.core.*
+import com.eventconnect.services.configuration.security.ECSSLContextUtil
+import com.eventconnect.services.configuration.security.ECSSLContextUtil.applyTruststorePair
+import com.eventconnect.services.configuration.security.ECSSLContextUtil.applyKeystorePair
+import com.eventconnect.services.constant.internal.SecretMapping
+import com.google.common.base.Strings
+import org.apache.http.conn.ssl.TrustAllStrategy
+import java.io.File
+import java.net.InetAddress
+import java.net.MalformedURLException
+import java.net.URL
+import java.net.UnknownHostException
+import java.util.*
+import java.util.logging.Logger
 
-import java.net.InetAddress;
-import java.net.MalformedURLException;
-import java.net.URL;
-import java.security.KeyStore;
-import java.util.*;
-import java.util.logging.Logger;
+class CassandraClientURI(uri: String, info: Properties?) {
+    /**
+     * Gets the list of hosts
+     *
+     * @return the host list
+     */
+    @JvmField
+    var hosts: List<String>? = null
 
-import static com.datastax.driver.core.QueryOptions.DEFAULT_CONSISTENCY_LEVEL;
-import static com.dbschema.DriverPropertyInfoHelper.*;
-import static com.dbschema.SSLUtil.getTrustEverybodySSLContext;
+    /**
+     * Gets the keyspace name
+     *
+     * @return the keyspace name
+     */
+    @JvmField
+    var keyspace: String? = null
 
-public class CassandraClientURI {
+    /**
+     * Gets the collection name
+     *
+     * @return the collection name
+     */
+    var collection: String? = null
 
-    private static final Logger logger = Logger.getLogger("CassandraClientURILogger");
+    /**
+     * Get the unparsed URI.
+     *
+     * @return the URI
+     */
+    val uRI: String
 
-    static final String PREFIX = "jdbc:cassandra://";
+    /**
+     * Gets the username
+     *
+     * @return the username
+     */
+    val username: String?
 
-    private final List<String> hosts;
-    private final String keyspace;
-    private final String collection;
-    private final String uri;
-    private final String userName;
-    private final String password;
-    private final boolean sslEnabled;
-    private final boolean verifyServerCert;
-    private final ConsistencyLevel consistencyLevel;
+    /**
+     * Gets the password
+     *
+     * @return the password
+     */
+    @JvmField
+    val password: String?
 
-    public CassandraClientURI(String uri, Properties info) {
-        this.uri = uri;
-        if (!uri.startsWith(PREFIX))
-            throw new IllegalArgumentException("URI needs to start with " + PREFIX);
+    /**
+     * Gets the ssl enabled property
+     *
+     * @return the ssl enabled property
+     */
+    @JvmField
+    val sslEnabled: Boolean
+    private val verifyServerCert: Boolean
 
-        uri = uri.substring(PREFIX.length());
+    @JvmField
+    val consistencyLevel: ConsistencyLevel
+
+    init {
+        var uri = uri
+        this.uRI = uri
+        require(uri.startsWith(PREFIX)) { "URI needs to start with $PREFIX" }
+
+        uri = uri.substring(PREFIX.length)
 
 
-        String serverPart;
-        String nsPart;
-        Map<String, List<String>> options = null;
+        var serverPart: String
+        var nsPart: String?
+        var options: Map<String?, MutableList<String?>?>? = null
 
-        {
-            int lastSlashIndex = uri.lastIndexOf("/");
+        run {
+            val lastSlashIndex = uri.lastIndexOf("/")
             if (lastSlashIndex < 0) {
-                if (uri.contains("?")) {
-                    throw new IllegalArgumentException("URI contains options without trailing slash");
-                }
-                serverPart = uri;
-                nsPart = null;
+                require(!uri.contains("?")) { "URI contains options without trailing slash" }
+                serverPart = uri
+                nsPart = null
             } else {
-                serverPart = uri.substring(0, lastSlashIndex);
-                nsPart = uri.substring(lastSlashIndex + 1);
+                serverPart = uri.substring(0, lastSlashIndex)
+                nsPart = uri.substring(lastSlashIndex + 1)
 
-                int questionMarkIndex = nsPart.indexOf("?");
+                val questionMarkIndex = nsPart!!.indexOf("?")
                 if (questionMarkIndex >= 0) {
-                    options = parseOptions(nsPart.substring(questionMarkIndex + 1));
-                    nsPart = nsPart.substring(0, questionMarkIndex);
+                    options = parseOptions(nsPart!!.substring(questionMarkIndex + 1))
+                    nsPart = nsPart!!.substring(0, questionMarkIndex)
                 }
             }
         }
 
-        this.userName = getOption(info, options, "user", null);
-        this.password = getOption(info, options, "password", null);
-        String sslEnabledOption = getOption(info, options, ENABLE_SSL, ENABLE_SSL_DEFAULT);
-        this.sslEnabled = isTrue(sslEnabledOption);
-        String verifyServerCertOption = getOption(info, options, VERIFY_SERVER_CERTIFICATE, VERIFY_SERVER_CERTIFICATE_DEFAULT);
-        this.verifyServerCert = isTrue(verifyServerCertOption);
-        String consistencyLevelOption = getOption(info, options, CONSISTENCY_LEVEL, CONSISTENCY_LEVEL_DEFAULT);
-        ConsistencyLevel consistencyLevel;
-        try {
-            consistencyLevel = ConsistencyLevel.valueOf(consistencyLevelOption.toUpperCase(Locale.ENGLISH));
+        this.username = getOption(info, options, "user", null)
+        this.password = getOption(info, options, "password", null)
+        val sslEnabledOption =
+            getOption(info, options, DriverPropertyInfoHelper.ENABLE_SSL, DriverPropertyInfoHelper.ENABLE_SSL_DEFAULT)
+        this.sslEnabled = DriverPropertyInfoHelper.isTrue(sslEnabledOption)
+        val verifyServerCertOption = getOption(
+            info,
+            options,
+            DriverPropertyInfoHelper.VERIFY_SERVER_CERTIFICATE,
+            DriverPropertyInfoHelper.VERIFY_SERVER_CERTIFICATE_DEFAULT
+        )
+        this.verifyServerCert = DriverPropertyInfoHelper.isTrue(verifyServerCertOption)
+        val consistencyLevelOption = getOption(
+            info,
+            options,
+            DriverPropertyInfoHelper.CONSISTENCY_LEVEL,
+            DriverPropertyInfoHelper.CONSISTENCY_LEVEL_DEFAULT
+        )
+        var consistencyLevel = try {
+            ConsistencyLevel.valueOf(consistencyLevelOption.uppercase())
+        } catch (ignored: IllegalArgumentException) {
+            QueryOptions.DEFAULT_CONSISTENCY_LEVEL
         }
-        catch (IllegalArgumentException ignored) {
-            consistencyLevel = DEFAULT_CONSISTENCY_LEVEL;
-        }
-        this.consistencyLevel = consistencyLevel;
+        this.consistencyLevel = consistencyLevel
 
 
-        { // userName,password,hosts
-            List<String> all = new LinkedList<>();
+        run {
+            // userName,password,hosts
+            val all: MutableList<String> = LinkedList()
 
-            Collections.addAll(all, serverPart.split(","));
-
-            hosts = Collections.unmodifiableList(all);
+            Collections.addAll(all, *serverPart.split(",".toRegex()).dropLastWhile { it.isEmpty() }.toTypedArray())
+            hosts = Collections.unmodifiableList(all)
         }
 
-        if (nsPart != null && nsPart.length() != 0) { // keyspace._collection
-            int dotIndex = nsPart.indexOf(".");
+        if (nsPart != null && nsPart!!.length != 0) { // keyspace._collection
+            val dotIndex = nsPart!!.indexOf(".")
             if (dotIndex < 0) {
-                keyspace = nsPart;
-                collection = null;
+                keyspace = nsPart
+                collection = null
             } else {
-                keyspace = nsPart.substring(0, dotIndex);
-                collection = nsPart.substring(dotIndex + 1);
+                keyspace = nsPart!!.substring(0, dotIndex)
+                collection = nsPart!!.substring(dotIndex + 1)
             }
         } else {
-            keyspace = null;
-            collection = null;
+            keyspace = null
+            collection = null
         }
     }
 
@@ -106,162 +156,122 @@ public class CassandraClientURI {
      * @return option from properties or from uri if it is not found in properties.
      * null if options was not found.
      */
-    private String getOption(Properties properties, Map<String, List<String>> options, String optionName, String defaultValue) {
+    private fun getOption(
+        properties: Properties?,
+        options: Map<String?, MutableList<String?>?>?,
+        optionName: String,
+        defaultValue: String?
+    ): String {
         if (properties != null) {
-            String option = (String) properties.get(optionName);
+            val option = properties[optionName] as String?
             if (option != null) {
-                return option;
+                return option
             }
         }
-        String value = getLastValue(options, optionName);
-        return value != null ? value : defaultValue;
+        val value = getLastValue(options, optionName)
+        return value ?: defaultValue!!
     }
 
-    Cluster createCluster() throws java.net.UnknownHostException, SSLParamsException {
-        Cluster.Builder builder = Cluster.builder();
-        int port = -1;
-        for (String host : hosts) {
-            int idx = host.indexOf(":");
+    @Suppress("UNCHECKED_CAST")
+    @Throws(UnknownHostException::class, SSLParamsException::class)
+    fun createCluster(): Cluster {
+        logger.info("Creating cluster")
+        val builder = Cluster.builder()
+        var port = -1
+        for (hostItem in hosts!!) {
+            var host = hostItem
+
+            val idx = host.indexOf(":")
             if (idx > 0) {
-                port = Integer.parseInt(host.substring(idx + 1).trim());
-                host = host.substring(0, idx).trim();
+                port = host.substring(idx + 1).trim { it <= ' ' }.toInt()
+                host = host.substring(0, idx).trim { it <= ' ' }
             }
-            builder.addContactPoints(InetAddress.getByName(host));
-            logger.info("sslenabled: " + sslEnabled);
+            logger.info("Adding contact point: $host with port $port")
+            builder.addContactPoints(InetAddress.getByName(host))
+            logger.info("sslenabled: $sslEnabled")
             if (sslEnabled) {
-                if (verifyServerCert) {
-                    builder.withSSL();
-                }
-                else {
-                    String keyStoreType = System.getProperty("javax.net.ssl.keyStoreType", KeyStore.getDefaultType());
-                    String keyStorePassword = System.getProperty("javax.net.ssl.keyStorePassword", "");
-                    String keyStoreUrl = System.getProperty("javax.net.ssl.keyStore", "");
-                    // check keyStoreUrl
-                    if (!Strings.isNullOrEmpty(keyStoreUrl)) {
-                        try {
-                            new URL(keyStoreUrl);
-                        } catch (MalformedURLException e) {
-                            keyStoreUrl = "file:" + keyStoreUrl;
+                val truststore = Pair(
+                    SecretMapping.File.cassClientTruststore,
+                    SecretMapping.Env.CassClientSsl.cassClientTruststorePassword
+                ).takeIf { it.first != null && it.second != null }
+
+                val keystore = Pair(
+                    SecretMapping.File.cassClientKeystore,
+                    SecretMapping.Env.CassClientSsl.cassClientKeystorePassword
+                ).takeIf { it.first != null && it.second != null }
+
+
+                if (truststore == null) logger.warning("Truststore or it's password is not defined. Truststore won't be applied to SSLContext.")
+                if (keystore == null) logger.warning("Keystore or it's password is not defined. Keystore won't be applied to SSLContext.")
+
+                val options: SSLOptions = RemoteEndpointAwareJdkSSLOptions.builder().withSSLContext(
+                    ECSSLContextUtil.sslContext {
+                        if (truststore != null) applyTruststorePair(
+                            truststore as Pair<File, String>,
+                            TrustAllStrategy.INSTANCE
+                        )
+                        if (keystore != null) applyKeystorePair(keystore as Pair<File, String>) { aliases, _ ->
+                            if (aliases.containsKey("client")) "client" else {
+                                aliases.entries.firstOrNull()?.key
+                                    ?: throw IllegalArgumentException("No alias found in keystore")
+                            }
                         }
                     }
-                    SSLOptions options = RemoteEndpointAwareJdkSSLOptions.builder().withSSLContext(getTrustEverybodySSLContext(keyStoreUrl, keyStoreType, keyStorePassword)).build();
-                    builder.withSSL(options);
-                }
+                ).withCipherSuites(SecretMapping.Env.CassClientSsl.cassClientCipherSuite)
+                    .build()
+
+                builder.withSSL(options)
             }
         }
-        if ( port > -1 ){
-            builder.withPort( port );
-
+        if (port > -1) {
+            builder.withPort(port)
         }
-        if (userName != null && !userName.isEmpty() && password != null) {
-            builder.withCredentials(userName, password);
-            System.out.println("Using authentication as user '" + userName + "'");
+        if (username != null && !username.isEmpty() && password != null) {
+            builder.withCredentials(username, password)
+            println("Using authentication as user '" + username + "'")
         }
-        return builder.build();
+        return builder.build()
     }
 
 
-    private String getLastValue(final Map<String, List<String>> optionsMap, final String key) {
-        if (optionsMap == null) return null;
-        List<String> valueList = optionsMap.get(key.toLowerCase(Locale.ENGLISH));
-        if (valueList == null || valueList.size() == 0) return null;
-        return valueList.get(valueList.size() - 1);
+    private fun getLastValue(optionsMap: Map<String?, MutableList<String?>?>?, key: String): String? {
+        if (optionsMap == null) return null
+        val valueList: List<String?>? = optionsMap[key.lowercase()]
+        if (valueList == null || valueList.size == 0) return null
+        return valueList[valueList.size - 1]
     }
 
-    private Map<String, List<String>> parseOptions(String optionsPart) {
-        Map<String, List<String>> optionsMap = new HashMap<>();
+    private fun parseOptions(optionsPart: String): Map<String?, MutableList<String?>?> {
+        val optionsMap: MutableMap<String?, MutableList<String?>?> = HashMap()
 
-        for (String _part : optionsPart.split("[&;]")) {
-            int idx = _part.indexOf("=");
+        for (_part in optionsPart.split("[&;]".toRegex()).dropLastWhile { it.isEmpty() }.toTypedArray()) {
+            val idx = _part.indexOf("=")
             if (idx >= 0) {
-                String key = _part.substring(0, idx).toLowerCase(Locale.ENGLISH);
-                String value = _part.substring(idx + 1);
-                List<String> valueList = optionsMap.get(key);
+                val key = _part.substring(0, idx).lowercase()
+                val value = _part.substring(idx + 1)
+                var valueList = optionsMap[key]
                 if (valueList == null) {
-                    valueList = new ArrayList<>(1);
+                    valueList = ArrayList(1)
                 }
-                valueList.add(value);
-                optionsMap.put(key, valueList);
+                valueList.add(value)
+                optionsMap[key] = valueList
             }
         }
 
-        return optionsMap;
+        return optionsMap
     }
 
 
     // ---------------------------------
 
-    /**
-     * Gets the username
-     *
-     * @return the username
-     */
-    public String getUsername() {
-        return userName;
+
+    override fun toString(): String {
+        return uRI
     }
 
-    /**
-     * Gets the password
-     *
-     * @return the password
-     */
-    public String getPassword() {
-        return password;
-    }
+    companion object {
+        private val logger: Logger = Logger.getLogger("CassandraClientURILogger")
 
-    /**
-     * Gets the ssl enabled property
-     *
-     * @return the ssl enabled property
-     */
-    public Boolean getSslEnabled() {
-        return sslEnabled;
-    }
-
-    /**
-     * Gets the list of hosts
-     *
-     * @return the host list
-     */
-    public List<String> getHosts() {
-        return hosts;
-    }
-
-    /**
-     * Gets the keyspace name
-     *
-     * @return the keyspace name
-     */
-    public String getKeyspace() {
-        return keyspace;
-    }
-
-
-    /**
-     * Gets the collection name
-     *
-     * @return the collection name
-     */
-    public String getCollection() {
-        return collection;
-    }
-
-    /**
-     * Get the unparsed URI.
-     *
-     * @return the URI
-     */
-    public String getURI() {
-        return uri;
-    }
-
-
-    @Override
-    public String toString() {
-        return uri;
-    }
-
-    public ConsistencyLevel getConsistencyLevel() {
-        return consistencyLevel;
+        const val PREFIX: String = "jdbc:cassandra://"
     }
 }

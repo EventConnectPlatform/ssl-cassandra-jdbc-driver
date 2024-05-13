@@ -59,7 +59,7 @@ public class CassandraJdbcDriver implements Driver {
             try {
                 Cluster cluster = clientURI.createCluster();
                 registerCodecs(cluster);
-                String keyspace = clientURI.getKeyspace();
+                String keyspace = clientURI.keyspace;
                 Session session;
                 try {
                     if (keyspace != null && !keyspace.isEmpty()) session = tryToConnect(cluster, keyspace);
@@ -68,7 +68,7 @@ public class CassandraJdbcDriver implements Driver {
                     throw new SQLException(e.getMessage(), e);
                 }
                 boolean returnNullStringsFromIntroQuery = Boolean.parseBoolean(info.getProperty(RETURN_NULL_STRINGS_FROM_INTRO_QUERY_KEY));
-                return new CassandraConnection(session, this, returnNullStringsFromIntroQuery, clientURI.getConsistencyLevel());
+                return new CassandraConnection(session, this, returnNullStringsFromIntroQuery, clientURI.consistencyLevel);
             } catch (UnknownHostException e) {
                 throw new SQLException(e.getMessage(), e);
             }
