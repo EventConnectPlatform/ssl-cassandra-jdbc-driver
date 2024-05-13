@@ -17,6 +17,8 @@ object SecretMapping {
         const val cassClientTruststore = "CASS_CLIENT_TRUSTSTORE"
         const val cassClientTruststorePassword = "CASS_CLIENT_TRUSTSTORE_PASSWORD"
 
+        const val cassClientKeyAlias = "CASS_CLIENT_KEY_ALIAS"
+
         const val cassClientCipherSuite = "CASS_CLIENT_CIPHER_SUITE"
     }
 
@@ -43,9 +45,9 @@ object SecretMapping {
             val cassClientTruststore = env[Key.cassClientTruststore]
             val cassClientTruststorePassword = env[Key.cassClientTruststorePassword]
 
-            val cassClientCipherSuite = env[Key.cassClientCipherSuite]?.let {
-                it.split(",").map { cipher -> cipher.trim() }.toTypedArray<String>()
-            } ?: arrayOf("TLS_RSA_WITH_AES_128_CBC_SHA", "TLS_RSA_WITH_AES_256_CBC_SHA")
+            val cassClientKeyAlias = env[Key.cassClientKeyAlias]
+            val cassClientCipherSuite = (env[Key.cassClientCipherSuite] ?: "TLS_RSA_WITH_AES_128_CBC_SHA, TLS_RSA_WITH_AES_256_CBC_SHA")
+                .let { it.split(",").map { cipher -> cipher.trim() }.toTypedArray<String>() }
         }
 
         object Cassandra {}

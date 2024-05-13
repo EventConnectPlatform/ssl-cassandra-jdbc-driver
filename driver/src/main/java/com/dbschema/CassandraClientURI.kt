@@ -215,6 +215,9 @@ class CassandraClientURI(uri: String, info: Properties?) {
                             TrustAllStrategy.INSTANCE
                         )
                         if (keystore != null) applyKeystorePair(keystore as Pair<File, String>) { aliases, _ ->
+                            SecretMapping.Env.CassClientSsl.cassClientKeyAlias?.also {alias ->
+                                if (aliases.containsKey(alias)) return@applyKeystorePair alias else throw IllegalArgumentException("Keystore alias was explicitly defined but not found in keystore: $alias")
+                            }
                             if (aliases.containsKey("client")) "client" else {
                                 aliases.entries.firstOrNull()?.key
                                     ?: throw IllegalArgumentException("No alias found in keystore")
@@ -232,7 +235,7 @@ class CassandraClientURI(uri: String, info: Properties?) {
         }
         if (username != null && !username.isEmpty() && password != null) {
             builder.withCredentials(username, password)
-            println("Using authentication as user '" + username + "'")
+            println("Using authentication as user '$username'")
         }
         return builder.build()
     }
