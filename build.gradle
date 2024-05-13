@@ -1,6 +1,7 @@
 plugins {
     id 'java'
     id 'org.jetbrains.kotlin.jvm'
+    id 'com.github.johnrengelman.shadow' version '7.1.2'
 }
 
 version '1.5'
@@ -34,10 +35,11 @@ dependencies {
     implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8"
 }
 
-jar {
-    from {
-        configurations.compile.collect { it.isDirectory() ? it : zipTree(it) }
-    }
+shadowJar {
+    destinationDirectory.set(file('jar'))
+    archiveBaseName.set('ssl-cassandra-jdbc-driver')
+    archiveClassifier.set('')
+    archiveVersion.set(version)
 }
 
 task sourcesJar(type: Jar, dependsOn: classes) {
