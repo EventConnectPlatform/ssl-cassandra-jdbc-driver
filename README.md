@@ -8,7 +8,7 @@ Forked from [Cassandra JDBC Driver](https://github.com/DataGrip/cassandra-jdbc-d
 
 ## Building JAR
 ```
-# Linux, MacOs
+# Linux, MacOS
 ./gradlew shadowJar
 
 # Windows
